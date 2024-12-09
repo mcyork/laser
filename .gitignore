@@ -46,3 +46,4 @@ ENV/
 .Trashes
 ehthumbs.db
 Thumbs.db
+build-dev-laser_maze.sh
