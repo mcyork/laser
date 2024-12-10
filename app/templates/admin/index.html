@@ -5,9 +5,15 @@
 
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <h2 class="text-2xl font-bold mb-6">Admin Dashboard</h2>
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">Admin Dashboard</h2>
+        <a href="{{ url_for('admin.documentation') }}" 
+           class="text-green-500 hover:text-green-400">
+            Documentation
+        </a>
+    </div>
     
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <!-- Settings Card -->
         <div class="bg-gray-800 rounded-lg p-6">
             <h3 class="text-xl font-semibold mb-4">Settings</h3>
@@ -38,6 +44,59 @@
                     <span class="text-gray-400">Uptime:</span>
                     <span class="ml-2" id="uptime">Loading...</span>
                 </div>
+                <div>
+                    <span class="text-gray-400">Connected Devices:</span>
+                    <span class="ml-2" id="device-count">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firmware Management -->
+    <div class="bg-gray-800 rounded-lg p-6 mb-8">
+        <h3 class="text-xl font-semibold mb-4">Firmware Management</h3>
+        
+        <!-- Upload Section -->
+        <div class="mb-6 border-b border-gray-700 pb-6">
+            <h4 class="text-lg font-medium mb-3">Upload New Firmware</h4>
+            <form id="firmware-upload" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Firmware File (.bin)</label>
+                    <input type="file" name="firmware" accept=".bin" 
+                           class="block w-full text-sm text-gray-400
+                                  file:mr-4 file:py-2 file:px-4
+                                  file:rounded-md file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-green-900 file:text-green-400
+                                  hover:file:bg-green-800">
+                </div>
+                <button type="submit" 
+                        class="bg-green-700 text-white px-4 py-2 rounded-md
+                               hover:bg-green-600 transition-colors">
+                    Upload Firmware
+                </button>
+            </form>
+        </div>
+
+        <!-- Available Firmware -->
+        <div>
+            <h4 class="text-lg font-medium mb-3">Available Firmware</h4>
+            <div id="firmware-list" class="space-y-3">
+                <div class="animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                    <div class="h-4 bg-gray-700 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connected Devices -->
+    <div class="bg-gray-800 rounded-lg p-6">
+        <h3 class="text-xl font-semibold mb-4">Connected Devices</h3>
+        <div id="device-list" class="space-y-4">
+            <div class="animate-pulse">
+                <div class="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                <div class="h-4 bg-gray-700 rounded w-1/2"></div>
             </div>
         </div>
     </div>
@@ -46,6 +105,182 @@
 
 {% block extra_js %}
 <script>
-// Add any admin-specific JavaScript here
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch initial data
+    fetchFirmwareList();
+    fetchConnectedDevices();
+    updateUptime();
+
+    // Set up periodic updates
+    setInterval(updateUptime, 1000);
+    setInterval(fetchConnectedDevices, 5000);
+
+    // Handle firmware upload
+    document.getElementById('firmware-upload').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        
+        try {
+            const response = await fetch('/admin/firmware/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            
+            if (response.ok) {
+                showNotification('Firmware uploaded successfully', 'success');
+                fetchFirmwareList();
+            } else {
+                showNotification(`Upload failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            showNotification('Upload failed: ' + error.message, 'error');
+        }
+    });
+});
+
+async function fetchFirmwareList() {
+    try {
+        const response = await fetch('/admin/firmware');
+        const firmwareList = await response.json();
+        updateFirmwareList(firmwareList);
+    } catch (error) {
+        console.error('Failed to fetch firmware list:', error);
+        document.getElementById('firmware-list').innerHTML = 
+            '<div class="text-red-500">Failed to load firmware list</div>';
+    }
+}
+
+async function fetchConnectedDevices() {
+    try {
+        const response = await fetch('/api/devices/list');
+        const devices = await response.json();
+        updateDeviceList(devices);
+        document.getElementById('device-count').textContent = devices.length;
+    } catch (error) {
+        console.error('Failed to fetch devices:', error);
+        document.getElementById('device-list').innerHTML = 
+            '<div class="text-red-500">Failed to load connected devices</div>';
+        document.getElementById('device-count').textContent = 'Error';
+    }
+}
+
+function updateFirmwareList(firmwareList) {
+    const listElement = document.getElementById('firmware-list');
+    
+    if (firmwareList.length === 0) {
+        listElement.innerHTML = '<div class="text-gray-400">No firmware available</div>';
+        return;
+    }
+
+    listElement.innerHTML = firmwareList.map(fw => `
+        <div class="border border-gray-700 rounded p-4 flex justify-between items-center">
+            <div>
+                <div class="font-medium">${fw.filename}</div>
+                <div class="text-sm text-gray-400">
+                    Version: ${fw.version}
+                    <span class="mx-2">•</span>
+                    Size: ${formatBytes(fw.size)}
+                    <span class="mx-2">•</span>
+                    Uploaded: ${new Date(fw.uploaded_at).toLocaleString()}
+                </div>
+            </div>
+            <button onclick="deleteFirmware('${fw.filename}')"
+                    class="text-red-500 hover:text-red-400">
+                Delete
+            </button>
+        </div>
+    `).join('');
+}
+
+function updateDeviceList(devices) {
+    const listElement = document.getElementById('device-list');
+    
+    if (devices.length === 0) {
+        listElement.innerHTML = '<div class="text-gray-400">No devices connected</div>';
+        return;
+    }
+
+    listElement.innerHTML = devices.map(device => `
+        <div class="border border-gray-700 rounded p-4">
+            <div class="flex justify-between items-start mb-2">
+                <div class="font-medium">${device.guid}</div>
+                <span class="px-2 py-1 rounded text-sm ${
+                    device.status === 'active' 
+                        ? 'bg-green-900 text-green-400' 
+                        : 'bg-gray-700 text-gray-400'
+                }">
+                    ${device.status}
+                </span>
+            </div>
+            <div class="text-sm text-gray-400">
+                Firmware: ${device.firmware_version}
+                <span class="mx-2">•</span>
+                IP: ${device.ip_address}
+                <span class="mx-2">•</span>
+                Last seen: ${new Date(device.last_seen).toLocaleString()}
+            </div>
+            <div class="text-sm text-gray-400 mt-1">
+                Capabilities: ${device.capabilities.join(', ')}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function deleteFirmware(filename) {
+    if (!confirm('Are you sure you want to delete this firmware?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/firmware/${filename}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showNotification('Firmware deleted successfully', 'success');
+            fetchFirmwareList();
+        } else {
+            const result = await response.json();
+            showNotification(`Failed to delete firmware: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification('Failed to delete firmware: ' + error.message, 'error');
+    }
+}
+
+function updateUptime() {
+    // TODO: Replace with actual uptime from backend
+    const uptime = Math.floor(Date.now() / 1000);
+    document.getElementById('uptime').textContent = formatUptime(uptime);
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function formatUptime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    parts.push(`${secs}s`);
+    
+    return parts.join(' ');
+}
+
+function showNotification(message, type = 'info') {
+    // TODO: Implement proper notification system
+    alert(message);
+}
 </script>
 {% endblock %}

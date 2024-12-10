@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Laser Maze Admin - Documentation{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">Laser Maze Documentation</h1>
+    
+    <!-- Hardware Versions -->
+    <section class="mb-8">
+        <h2 class="text-xl font-semibold mb-4">Hardware Versions</h2>
+        <div class="bg-white shadow rounded-lg p-6">
+            <h3 class="font-semibold mb-2">Prototype 1</h3>
+            <ul class="list-disc pl-6 mb-4">
+                <li>ESP32 microcontroller</li>
+                <li>4 LEDs (LED1-LED4)</li>
+                <li>Basic functionality testing</li>
+                <li>Primary development platform</li>
+            </ul>
+            
+            <h3 class="font-semibold mb-2">Prototype 2</h3>
+            <ul class="list-disc pl-6">
+                <li>ESP32-S3-MINI-1-N8 microcontroller</li>
+                <li>5 LEDs (including power indicator)</li>
+                <li>2 Lasers (controlled via IO33 and IO21)</li>
+                <li>5 LDR sensors</li>
+                <li>Multiple servos with level shifter</li>
+                <li>Future implementation</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- Development Progress -->
+    <section class="mb-8">
+        <h2 class="text-xl font-semibold mb-4">Development Progress</h2>
+        <div class="bg-white shadow rounded-lg p-6">
+            <div class="mb-4">
+                <h3 class="font-semibold mb-2">Current Features</h3>
+                <ul class="list-disc pl-6">
+                    <li>Basic WebSocket communication</li>
+                    <li>LED control interface</li>
+                    <li>Admin interface foundation</li>
+                    <li>NTP-based timing for event sequencing</li>
+                </ul>
+            </div>
+            
+            <div>
+                <h3 class="font-semibold mb-2">In Development</h3>
+                <ul class="list-disc pl-6">
+                    <li>OTA update system via Raspberry Pi</li>
+                    <li>Extended admin controls</li>
+                    <li>Documentation system</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- OTA Update System -->
+    <section class="mb-8">
+        <h2 class="text-xl font-semibold mb-4">OTA Update System</h2>
+        <div class="bg-white shadow rounded-lg p-6">
+            <h3 class="font-semibold mb-2">Architecture</h3>
+            <ul class="list-disc pl-6 mb-4">
+                <li>Flask server on Raspberry Pi acts as update server</li>
+                <li>Binary files stored and served from Pi</li>
+                <li>Version tracking and rollback capability</li>
+                <li>Update progress monitoring</li>
+            </ul>
+            
+            <h3 class="font-semibold mb-2">Update Process</h3>
+            <ol class="list-decimal pl-6">
+                <li>Upload new firmware through admin interface</li>
+                <li>Verify firmware integrity</li>
+                <li>Deploy to selected devices</li>
+                <li>Monitor update progress</li>
+                <li>Verify successful update</li>
+            </ol>
+        </div>
+    </section>
+</div>
+{% endblock %}

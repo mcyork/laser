@@ -4,6 +4,7 @@ from flask_socketio import SocketIO
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from config import Config
+import logging
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -18,8 +19,17 @@ def create_app(config_class=Config):
     socketio.init_app(app)  # Initialize SocketIO with app
     
     # Register blueprints
-    from app.routes import main, admin
+    from app.routes import main, admin, devices
     app.register_blueprint(main.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(devices.bp)
     
     return app
+
+def setup_firmware_logging():
+    logger = logging.getLogger('firmware')
+    handler = logging.FileHandler('firmware.log')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
