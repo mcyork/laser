@@ -1,0 +1,81 @@
+<!-- app/templates/game.html -->
+{% extends "base.html" %}
+
+{% block title %}Laser Maze - Game{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <!-- Timer Display -->
+    <div class="mb-12">
+        <div id="timer" class="text-8xl font-bold font-mono text-green-500 mb-4">00:00.000</div>
+        <div id="status" class="text-xl text-gray-400">Ready</div>
+    </div>
+
+    <!-- Game Controls -->
+    <div class="flex justify-center gap-8">
+        <button id="startButton" 
+                class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg text-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors">
+            Start
+        </button>
+        <button id="stopButton" 
+                class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-8 rounded-lg text-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition-colors"
+                disabled>
+            Stop
+        </button>
+    </div>
+
+    <!-- Laser Status Indicators -->
+    <div class="mt-12 grid grid-cols-5 gap-4 max-w-2xl mx-auto">
+        {% for i in range(1, 6) %}
+        <div class="laser-status" data-laser="{{ i }}">
+            <div class="h-4 w-4 rounded-full bg-green-500 mx-auto"></div>
+            <div class="text-sm mt-2 text-gray-400">Laser {{ i }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const timer = document.getElementById('timer');
+    const status = document.getElementById('status');
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    let startTime;
+    let timerInterval;
+    
+    function formatTime(ms) {
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        const milliseconds = ms % 1000;
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+    }
+    
+    function updateTimer() {
+        const elapsed = Date.now() - startTime;
+        timer.textContent = formatTime(elapsed);
+    }
+    
+    startButton.addEventListener('click', function() {
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 10);
+        status.textContent = 'Running';
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        // Add WebSocket call to start game
+    });
+    
+    stopButton.addEventListener('click', function() {
+        clearInterval(timerInterval);
+        status.textContent = 'Stopped';
+        startButton.disabled = false;
+        stopButton.disabled = true;
+        // Add WebSocket call to stop game
+    });
+    
+    // Add WebSocket connection for real-time updates
+});
+</script>
+{% endblock %}
