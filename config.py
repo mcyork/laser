@@ -11,5 +11,4 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Move these inside the Config class
-    FIRMWARE_UPLOAD_DIR = os.path.join(basedir, 'app', 'firmware')
-    FIRMWARE_DIR = os.path.join(basedir, 'firmware')
+    FIRMWARE_DIR = os.path.join(basedir, 'app', 'firmware')
