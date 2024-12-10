@@ -79,3 +79,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
+{% block game_scripts %}
+    <script src="{{ url_for('static', filename='socket.io/socket.io.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/laser_maze.js') }}"></script>
+{% endblock %}

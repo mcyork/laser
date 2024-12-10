@@ -30,10 +30,9 @@
         </footer>
     </div>
 
-    <!-- Socket.IO -->
-    <script src="{{ url_for('static', filename='socket.io/socket.io.js') }}"></script>
-    <!-- Game-specific JavaScript -->
-    <script src="{{ url_for('static', filename='js/laser_maze.js') }}"></script>
+    <!-- Socket.IO - only load if needed -->
+    {% block game_scripts %}{% endblock %}
+    
     {% block extra_js %}{% endblock %}
 </body>
 </html>
