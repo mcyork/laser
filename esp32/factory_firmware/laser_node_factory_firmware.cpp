@@ -1,13 +1,12 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <ArduinoJson.h>
 #include <Preferences.h>
 #include <ArduinoOTA.h>
+#include <pgmspace.h>
 
-// Enable debug logs
+// Debug control - can be quickly disabled
 #define DEBUG 1
-
-#ifdef DEBUG
+#if DEBUG
     #define LOG(x) Serial.print(x)
     #define LOG_LN(x) Serial.println(x)
 #else
@@ -15,178 +14,168 @@
     #define LOG_LN(x)
 #endif
 
-// Board Configuration
+// Strings stored in flash memory
+const char WIFI_SSID[] PROGMEM = "YOUR_WIFI_SSID";
+const char WIFI_PASS[] PROGMEM = "YOUR_WIFI_PASSWORD";
+const char SERVER_URL[] PROGMEM = "http://192.168.43.243:8080/api/devices/checkin";
+
 #ifdef PROTO2_BOARD
-    const int LED1_PIN = 20;  // IO16
-    const int LED2_PIN = 26;  // IO26
-    const int LED3_PIN = 32;  // IO36
-    const int LED4_PIN = 23;  // IO19
-    const int LED5_PIN = 24;  // IO20 (Power LED)
-    const int LASER1_PIN = 28;  // IO33
-    const int LASER2_PIN = 25;  // IO21
-    const int SERVO1_PIN = 33;  // IO37
-    const int SERVO2_PIN = 34;  // IO38
-    const int SERVO3_PIN = 7;   // IO3
-    const int SERVO4_PIN = 13;  // IO9
-    const int LDR1_PIN = 9;   // IO5
-    const int LDR2_PIN = 11;  // IO7
-    const int LDR3_PIN = 10;  // IO6
-    const int LDR4_PIN = 17;  // IO13
-    const int LDR5_PIN = 8;   // IO4
+    // Full board configuration
+    struct PinConfig {
+        uint8_t led[5] = {20, 26, 32, 23, 24};    // LED1-5
+        uint8_t laser[2] = {28, 25};              // LASER1-2
+        uint8_t servo[4] = {33, 34, 7, 13};       // SERVO1-4
+        uint8_t ldr[5] = {9, 11, 10, 17, 8};      // LDR1-5
+    };
+    const char FW_VERSION[] PROGMEM = "1.0.0-proto2";
 #else
-    // Dev Board Configuration
-    #define DEV_BOARD
-    const int LED1_PIN = 2;  // Just use built-in LED
-    // Other pins undefined
+    // Minimal dev board configuration
+    struct PinConfig {
+        uint8_t led[1] = {2};  // Just built-in LED
+    };
+    const char FW_VERSION[] PROGMEM = "1.1.1-dev";
 #endif
 
-// Network configuration
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
-const char* SERVER_URL = "http://192.168.43.243:8080/api/devices/checkin";
+PinConfig pins;
 
-// Device configuration
-#ifdef PROTO2_BOARD
-    const char* FIRMWARE_VERSION = "1.0.0-proto2";
-#else
-    const char* FIRMWARE_VERSION = "1.1.1-dev";
-#endif
-
-const int CHECK_IN_INTERVAL = 30000; // 30 seconds
-unsigned long lastCheckin = 0;
+// Timing constants
+const uint32_t CHECK_IN_INTERVAL = 30000;
+uint32_t lastCheckin = 0;
 
 // GUID storage
 Preferences preferences;
-String deviceGuid = "";
+String deviceGuid;
 
-void setup() {
-    Serial.begin(115200);
-    
-    // Initialize pins based on board type
+// Simple JSON string builder class
+class JsonBuilder {
+    private:
+        String json;
+    public:
+        JsonBuilder() { json = "{"; }
+        
+        void addString(const char* key, const String& value) {
+            if (json.length() > 1) json += ",";
+            json += "\"" + String(key) + "\":\"" + value + "\"";
+        }
+        
+        void startArray(const char* key) {
+            if (json.length() > 1) json += ",";
+            json += "\"" + String(key) + "\":[";
+        }
+        
+        void addArrayString(const char* value, bool last = false) {
+            json += "\"" + String(value) + "\"";
+            if (!last) json += ",";
+        }
+        
+        void endArray() {
+            json += "]";
+        }
+        
+        String close() {
+            json += "}";
+            return json;
+        }
+};
+
+void setupPins() {
     #ifdef PROTO2_BOARD
-        // Full Proto 2 initialization
-        pinMode(LED1_PIN, OUTPUT);
-        pinMode(LED2_PIN, OUTPUT);
-        pinMode(LED3_PIN, OUTPUT);
-        pinMode(LED4_PIN, OUTPUT);
-        pinMode(LED5_PIN, OUTPUT);
-        pinMode(LASER1_PIN, OUTPUT);
-        pinMode(LASER2_PIN, OUTPUT);
-        pinMode(LDR1_PIN, INPUT);
-        pinMode(LDR2_PIN, INPUT);
-        pinMode(LDR3_PIN, INPUT);
-        pinMode(LDR4_PIN, INPUT);
-        pinMode(LDR5_PIN, INPUT);
+        for(auto pin : pins.led) pinMode(pin, OUTPUT);
+        for(auto pin : pins.laser) pinMode(pin, OUTPUT);
+        for(auto pin : pins.ldr) pinMode(pin, INPUT);
+        // Servos will be configured when needed
     #else
-        // Dev board - just built-in LED
-        pinMode(LED1_PIN, OUTPUT);
+        pinMode(pins.led[0], OUTPUT);
     #endif
+}
 
-    // Get stored GUID
-    preferences.begin("laser-maze", false);
-    deviceGuid = preferences.getString("guid", "");
-    Serial.print("Stored GUID: ");
-    Serial.println(deviceGuid);
-
-    // Connect to WiFi
-    WiFi.begin(ssid, password);
+void setupWiFi() {
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        Serial.print(".");
+        LOG(".");
     }
-    Serial.println("\nConnected to WiFi");
-    Serial.print("IP: ");
-    Serial.println(WiFi.localIP());
-
-    // Initial check-in
-    performCheckin();
+    LOG_LN("\nWiFi Connected");
 }
 
-void loop() {
-    if (millis() - lastCheckin >= CHECK_IN_INTERVAL) {
-        performCheckin();
-    }
-
-    // Basic LED blink to show we're alive
-    #ifdef DEV_BOARD
-        static unsigned long lastBlink = 0;
-        if (millis() - lastBlink >= 1000) {
-            static bool ledState = false;
-            digitalWrite(LED1_PIN, ledState);
-            ledState = !ledState;
-            lastBlink = millis();
-        }
-    #endif
-}
-
-void performCheckin() {
-    if (WiFi.status() != WL_CONNECTED) {
-        LOG_LN("WiFi not connected. Skipping check-in.");
-        return;
-    }
+bool sendCheckin() {
+    if (WiFi.status() != WL_CONNECTED) return false;
 
     HTTPClient http;
     http.begin(SERVER_URL);
     http.addHeader("Content-Type", "application/json");
 
-    // Prepare JSON payload
-    StaticJsonDocument<1024> doc;
-    doc["guid"] = deviceGuid;
-    doc["firmware_version"] = FIRMWARE_VERSION;
-    doc["ip_address"] = WiFi.localIP().toString();
+    JsonBuilder json;
+    json.addString("guid", deviceGuid);
+    json.addString("firmware_version", FW_VERSION);
+    json.addString("ip_address", WiFi.localIP().toString());
 
-    JsonArray capabilities = doc.createNestedArray("capabilities");
-
+    json.startArray("capabilities");
     #ifdef PROTO2_BOARD
-        // Full Proto 2 capabilities
-        capabilities.add("LED1");
-        capabilities.add("LED2");
-        capabilities.add("LED3");
-        capabilities.add("LED4");
-        capabilities.add("LED5");
-        capabilities.add("LASER1");
-        capabilities.add("LASER2");
-        capabilities.add("LDR1");
-        capabilities.add("LDR2");
-        capabilities.add("LDR3");
-        capabilities.add("LDR4");
-        capabilities.add("LDR5");
-        capabilities.add("SERVO1");
-        capabilities.add("SERVO2");
-        capabilities.add("SERVO3");
-        capabilities.add("SERVO4");
+        static const char* const CAPABILITIES[] PROGMEM = {
+            "LED", "LASER", "SERVO", "LDR"
+        };
+        for(int i = 0; i < 4; i++) {
+            json.addArrayString(CAPABILITIES[i], i == 3);
+        }
     #else
-        capabilities.add("LED1");
-        capabilities.add("DEV_BOARD");
+        json.addArrayString("LED1", true);
     #endif
+    json.endArray();
 
-    String payload;
-    serializeJson(doc, payload);
-    LOG("Sending payload: ");
+    String payload = json.close();
     LOG_LN(payload);
 
     int httpCode = http.POST(payload);
+    bool success = false;
+    
     if (httpCode > 0) {
         String response = http.getString();
-        LOG("Server response: ");
-        LOG_LN(response);
-
-        StaticJsonDocument<200> responseDoc;
-        DeserializationError error = deserializeJson(responseDoc, response);
-
-        if (!error && responseDoc.containsKey("guid")) {
-            if (deviceGuid.length() == 0) {
-                deviceGuid = responseDoc["guid"].as<String>();
-                preferences.putString("guid", deviceGuid);
-                LOG("Stored new GUID: ");
-                LOG_LN(deviceGuid);
+        if (deviceGuid.isEmpty()) {
+            int guidStart = response.indexOf("\"guid\":\"");
+            if (guidStart > 0) {
+                guidStart += 8; // length of "guid":"
+                int guidEnd = response.indexOf("\"", guidStart);
+                if (guidEnd > guidStart) {
+                    deviceGuid = response.substring(guidStart, guidEnd);
+                    preferences.putString("guid", deviceGuid);
+                    LOG("New GUID: "); LOG_LN(deviceGuid);
+                }
             }
         }
-    } else {
-        LOG("Check-in failed: ");
-        LOG_LN(http.errorToString(httpCode));
+        success = true;
     }
 
     http.end();
-    lastCheckin = millis();
+    return success;
+}
+
+void setup() {
+    #if DEBUG
+        Serial.begin(115200);
+    #endif
+    
+    setupPins();
+    
+    preferences.begin("laser-maze", false);
+    deviceGuid = preferences.getString("guid", "");
+    LOG("GUID: "); LOG_LN(deviceGuid);
+
+    setupWiFi();
+    sendCheckin();
+}
+
+void loop() {
+    if (millis() - lastCheckin >= CHECK_IN_INTERVAL) {
+        if (sendCheckin()) lastCheckin = millis();
+    }
+
+    #ifndef PROTO2_BOARD
+        // Simple heartbeat for dev board
+        static uint32_t lastBlink = 0;
+        if (millis() - lastBlink >= 1000) {
+            digitalWrite(pins.led[0], !digitalRead(pins.led[0]));
+            lastBlink = millis();
+        }
+    #endif
 }
